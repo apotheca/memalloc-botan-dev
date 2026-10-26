@@ -1,0 +1,188 @@
+cabal-version:  3.14
+name:           memalloc
+version:        0.1.0
+license:        BSD-3-Clause
+author:         Leo D.
+maintainer:     leo@haskell.foundation
+build-type:     Simple
+description:
+    Memory and allocation abstractions
+
+flag use-bytestring
+    description: Include ByteString support
+    manual:      True
+    default:     True
+
+common warnings
+    ghc-options:
+        -Wall
+        -Wcompat
+        -Wno-ambiguous-fields
+        -Wno-unused-imports
+        -Wno-unused-local-binds
+        -Wno-unused-top-binds
+        -Wno-name-shadowing
+        -Wno-missing-pattern-synonym-signatures
+        -Wno-unused-do-bind
+        -Wno-dodgy-exports
+
+common language
+    default-language: GHC2021
+    default-extensions:
+        -- ConstraintKinds
+        DataKinds
+        DefaultSignatures
+        DerivingStrategies
+        -- DuplicateRecordFields
+        FlexibleContexts
+        FlexibleInstances
+        -- KindSignatures
+        -- NoFieldSelectors
+        NoImplicitPrelude
+        -- OverloadedStrings
+        -- OverloadedRecordDot
+        -- QuantifiedConstraints
+        ScopedTypeVariables
+        TypeFamilies
+        -- TypeOperators
+
+common dependencies
+    build-depends:
+        base >= 4 && < 5
+    if flag(use-bytestring)
+        build-depends:
+            bytestring
+        cpp-options: -DUSE_BYTESTRING
+
+common paths
+    other-modules:
+        Paths_memalloc
+    autogen-modules:
+        Paths_memalloc
+        
+
+-- library alpha
+--     import: warnings, language, dependencies, paths
+--     visibility: public
+--     hs-source-dirs: alpha-src
+--     build-depends:
+--     exposed-modules:
+--         Memory.Prelude
+
+--         Memory.Boolean
+--         -- Memory.Bitfield
+--         -- Memory.Bitmask
+--         Memory.Bitwise
+--         Memory.Bits
+--         Memory.Cell
+--         Memory.Digits
+--         -- Rename this to Memory.Float.Sized
+--         Memory.Float
+--         Memory.Lattice
+--         Memory.Logic
+--         Memory.Host
+--         Memory.Metric
+--         -- Memory.Order -- FOR PARTIAL AND TOTAL EQUIVALENCE AND ORDER
+--         Memory.Storage
+--         -- Rename this to Memory.Unsigned.Sized -- or maybe Cardinal and Integer
+--         Memory.Word
+--         -- Rename this to Memory.Word
+--         Memory.Word.Compound
+--         -- Monad-specific
+--         -- Memory.IO.IORef,IOArray
+--         -- Memory.ST
+--         -- Memory.Zombie
+--     -- if flag(use-bytestring)
+--     --     exposed-modules:
+--     --         Memory.Allocator.ByteString
+
+library
+    import: warnings, language, dependencies, paths
+    visibility: public
+    hs-source-dirs: src
+    build-depends:
+    exposed-modules:
+        Memory.Prelude
+        Memory.Address
+        Memory.Allocator
+        Memory.Allocator.Arena
+        Memory.Allocator.C
+        Memory.Allocator.GC
+        Memory.Allocator.IORef
+        Memory.Allocator.Stack
+        Memory.Allocator.Std
+        Memory.Index
+        Memory.Lattice
+        Memory.Lattice.Operator
+        Memory.Memo
+        Memory.Memo.Array
+        Memory.Memo.Castable
+        Memory.Memo.Freeable
+        Memory.Memo.Handle
+        -- Memory.Memo.Iterator
+        Memory.Memo.Pointer
+        Memory.Memo.Pointer.Effect
+        Memory.Memo.Pointer.State
+        Memory.Memo.Reference
+        Memory.Memo.Retainable
+        Memory.Metric
+        Memory.Metric.IEC
+        Memory.Metric.SI
+        Memory.Relation
+        Memory.Relation.Equivalence
+        Memory.Relation.Operator
+        Memory.Relation.Order
+        Memory.Relation.Order.Strict
+    if flag(use-bytestring)
+        exposed-modules:
+            Memory.Allocator.ByteString
+
+library botan
+    hs-source-dirs: botan-src
+    default-language: GHC2021
+    default-extensions:
+        DataKinds
+        DerivingStrategies
+        DuplicateRecordFields
+        LambdaCase
+        NoFieldSelectors
+        OverloadedRecordDot
+        PatternSynonyms
+        RoleAnnotations
+        TypeFamilies
+        ViewPatterns
+    ghc-options:
+        -Wall
+        -Wcompat
+        -Wincomplete-uni-patterns
+        -Wincomplete-record-updates
+        -Wpartial-fields
+        -Widentities
+        -Wredundant-constraints
+        -Wmissing-export-lists
+        -Wno-unticked-promoted-constructors
+        -Wunused-packages
+        -Wmissing-deriving-strategies
+    exposed-modules:
+        Botan.BlockCipher
+        Botan.Cipher
+        Botan.Error
+        Botan.Hash
+        Botan.KeySpec
+        Botan.MAC
+        Botan.PubKey
+        Botan.RNG
+    other-modules:
+        Botan.Internal.ByteString
+        Botan.Internal.Error
+        Botan.Internal.Object
+        Botan.Internal.String
+        Botan.Internal.Prelude
+    build-depends:
+        base >=4.16 && <4.22,
+        array,
+        botan-bindings ^>=0.2,
+        bytestring >=0.11 && <0.13,
+        deepseq >=1.1 && <2,
+        text >=1.2 && <1.3 || >=2.0 && <2.2,
+        memalloc
