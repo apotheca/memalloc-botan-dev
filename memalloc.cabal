@@ -164,12 +164,16 @@ library botan
         -Wunused-packages
         -Wmissing-deriving-strategies
     exposed-modules:
+        Botan.Bcrypt
         Botan.BlockCipher
         Botan.Cipher
         Botan.Error
         Botan.Hash
+        Botan.KDF
         Botan.KeySpec
         Botan.MAC
+        Botan.MPI
+        Botan.OTP
         Botan.PubKey
         Botan.RNG
     other-modules:
