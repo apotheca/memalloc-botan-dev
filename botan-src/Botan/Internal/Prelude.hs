@@ -146,5 +146,6 @@ instance (Storable a, AllocaMany tys) => AllocaMany (a : tys) where
     allocaMany f = alloca $ \ p -> allocaMany (\ ps -> f (p :> ps))
 
 -- TODO: Generalize, relax Int to Integral, move to `memalloc`
+-- This would be withArrayLen or sometyhing
 withPtrLen :: ByteString -> (Ptr Word8 -> Int -> IO a) -> IO a
 withPtrLen mem f = withPtr mem $ \ ptr -> f ptr (ByteString.length mem)

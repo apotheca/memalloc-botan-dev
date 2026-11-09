@@ -119,6 +119,7 @@ library
         Memory.Memo.Castable
         Memory.Memo.Freeable
         Memory.Memo.Handle
+        Memory.Memo.Object
         -- Memory.Memo.Iterator
         Memory.Memo.Pointer
         Memory.Memo.Pointer.Effect

@@ -6,6 +6,7 @@ import Botan.RNG
 
 import qualified Foreign.Ptr as Foreign
 import qualified Data.ByteString as ByteString
+import Data.List (unfoldr)
 
 instance Memorized BotanMP where
     type Memo BotanMP = Ptr
@@ -238,3 +239,22 @@ mpLiftTrinary f dest a b c = mask_ $ withMP dest $ \ destPtr ->
     withMP b $ \ bPtr ->
     withMP c $ \ cPtr ->
     throwBotanIfNegative_ $ f destPtr aPtr bPtr cPtr
+
+-- TODO: Do this better
+mpToInteger :: MP -> IO Integer
+mpToInteger mp = do
+    bytes <- mpToBin mp
+    neg   <- mpIsNegative mp
+    let n = ByteString.foldl' (\ acc b -> acc * 256 + fromIntegral b) 0 bytes
+    return $ if neg then negate n else n
+
+mpFromInteger :: Integer -> IO MP
+mpFromInteger n = do
+    mp <- mpInit
+    mpFromBin mp $ ByteString.pack $ reverse $ unfoldr step (abs n)
+    when (n < 0) $ mpFlipSign mp
+    return mp
+  where
+    -- TODO: Use divMod
+    step 0 = Nothing
+    step k = Just (fromIntegral (k `mod` 256), k `div` 256)

@@ -71,3 +71,24 @@ class
 
     destroyBotan :: a -> IO ()
     destroyBotan botan = withMemo botan ForeignPtr.finalizeForeignPtr
+
+{-
+-- TODO: Use the opaque object generalization (not yet though, needs shaking loose)
+
+import Memory.Memo.Object
+
+type BotanObject = Object
+
+type BotanStruct a = ObjectStruct a
+type BotanPtr    a = ObjectPtr a
+
+withBotanPtr :: forall a b . BotanObject a => a -> (BotanPtr a -> IO b) -> IO b
+withBotanPtr = withObjectPtr
+
+createBotan :: forall a . BotanObject a => (Ptr (BotanPtr a) -> IO CInt) -> IO a
+createBotan initialize = createObject @a (throwBotanIfNegative_ . initialize)
+
+destroyBotan :: BotanObject a => a -> IO ()
+destroyBotan = destroyObject
+
+-}
