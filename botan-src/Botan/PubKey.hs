@@ -1,6 +1,18 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+{-
+generatePrivateKey
+derivePublicKey
+generateKeyPair
+encrypt
+decrypt
+sign
+verify
+keyAgree
+keyEncapsulate
+-}
+
 module Botan.PubKey
 (
     -- * Private keys
@@ -62,12 +74,6 @@ module Botan.PubKey
 ,   SLH_DSAMode(..)
 ,   slh_dsaModeName
 
-    -- * Encryption / signature padding
-,   EME(..)
-,   emeName
-,   EMSA(..)
-,   emsaName
-
     -- * Helpers
 -- ,   mkPrivKeyLoad1_name
 -- ,   mkPrivKeyLoad3
@@ -79,6 +85,10 @@ module Botan.PubKey
 ) where
 
 import Botan.Bindings.PubKey
+import Botan.Bindings.PubKey.Decrypt
+import Botan.Bindings.PubKey.Encrypt
+import Botan.Bindings.PubKey.Sign
+import Botan.Bindings.PubKey.Verify
 import Botan.Bindings.RNG
 import Botan.Hash (HashType, hashName)
 import Botan.Internal.Prelude
@@ -858,53 +868,6 @@ slh_dsaModeName Prehash_SLH_DSA_SHAKE_192_Small_with_SHAKE256  = "Hash-SLH-DSA-S
 slh_dsaModeName Prehash_SLH_DSA_SHAKE_192_Fast_with_SHAKE256   = "Hash-SLH-DSA-SHAKE-192f-with-SHAKE256"
 slh_dsaModeName Prehash_SLH_DSA_SHAKE_256_Small_with_SHAKE256  = "Hash-SLH-DSA-SHAKE-256s-with-SHAKE256"
 slh_dsaModeName Prehash_SLH_DSA_SHAKE_256_Fast_with_SHAKE256   = "Hash-SLH-DSA-SHAKE-256f-with-SHAKE256"
-
-{-
-EME / PKEncryptParams
--}
-
-data EME
-    = EME_RAW
-    | EME_PKCS1_v1_5
-    | EME_OAEP HashType
-    -- TODO: | EME_OAEP_MGF HashType MGFType
-    | EME_HASH HashType
-    | EME_SM2EncParam HashType
-    deriving stock (Show, Eq, Ord)
-
-emeName :: EME -> ByteString
-emeName EME_RAW             = BOTAN_EME_RAW
-emeName EME_PKCS1_v1_5      = BOTAN_EME_PKCS1_v1_5
-emeName (EME_OAEP h)        = BOTAN_EME_OAEP /$ hashName h
-emeName (EME_HASH h)        = hashName h
-emeName (EME_SM2EncParam h) = hashName h
-
-{-
-EMSA / PKSignParams
--}
-
-data EMSA
-    = EMSA_NONE
-    -- TODO: | EMSA_RSA
-    | EMSA4 HashType
-    | EMSA_Ed25519Pure
-    | EMSA_Ed25519Prehashed
-    | EMSA_Ed25519GnuPG HashType
-    | EMSA_HASH HashType
-    | EMSA_SM2SignParam ByteString HashType
-    -- TODO: | EMSA_XMSS
-    -- TODO: | EMSA_Dilithium
-    deriving stock (Show, Eq, Ord)
-
--- TODO: Botan should have emsa constants somewhere
-emsaName :: EMSA -> ByteString
-emsaName EMSA_NONE                 = ""
-emsaName (EMSA4 h)                 = "EMSA4" /$ hashName h
-emsaName EMSA_Ed25519Pure          = "Pure"
-emsaName EMSA_Ed25519Prehashed     = "Ed25519ph"
-emsaName (EMSA_Ed25519GnuPG h)     = hashName h
-emsaName (EMSA_HASH h)             = hashName h
-emsaName (EMSA_SM2SignParam uid h) = commas [ uid, hashName h ]
 
 
 {-

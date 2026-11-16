@@ -24,6 +24,7 @@ module Botan.Internal.Prelude
 , module Botan.Internal.Object
 , module Botan.Internal.Error
 , module Botan.KeySpec
+, doIO
 , queryBufferLength
 , botanObjectAction
 , botanObjectName
@@ -76,6 +77,15 @@ Prelude-internal imports
 -}
 
 import qualified Data.ByteString as ByteString
+
+{-
+Magic
+-}
+
+-- NOTE: This is for deterministic IO only
+-- TODO: A bit more safety than just this
+doIO :: IO a -> a
+doIO = unsafePerformIO
 
 {-
 Unplaced / botan-specific functions

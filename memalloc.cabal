@@ -176,6 +176,11 @@ library botan
         Botan.MPI
         Botan.OTP
         Botan.PubKey
+        -- TODO: Maybe rename KA, KEM, EME, EMSA?
+        Botan.PubKey.Agreement
+        Botan.PubKey.Encapsulation
+        Botan.PubKey.Encrypt
+        Botan.PubKey.Sign
         Botan.RNG
     other-modules:
         Botan.Internal.ByteString

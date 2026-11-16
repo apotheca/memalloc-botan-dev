@@ -1,10 +1,25 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Botan.MAC
-(   MAC(..)
-,   MACKey
-,   MACNonce
-,   MACDigest
+(   mac
+,   verifyMAC
+,   nmac
+,   verifyNMAC
+,   MACKey(..)
+,   MACNonce(..)
+,   MACDigest(..)
+,   generateMACKey
+,   generatePreferredMACKey
+,   macPreferredKeySize
+,   macGenerateNonce
+,   generatePreferredMACNonce
+,   macNonceLengthIsValid
+,   MACType(..)
+,   macName
+,   macKeySpec
+,   macDigestSize
+,   isNoncedMAC
+,   MAC(..)
 ,   withMAC
 ,   macInit
 ,   macGetName
@@ -15,22 +30,9 @@ module Botan.MAC
 ,   macUpdate
 ,   macFinalize
 ,   macClear
-,   mac
-,   auth
-,   MACType(..)
-,   macName
-,   macDigestSize
-,   macKeySpec
 ,   generateMACKeySpecs
 ,   generateMACDigestSizes
 ,   macs
-,   isNoncedMAC
-,   macNonceLengthIsValid
-,   generateMACKey
-,   generatePreferredMACKey
-,   macPreferredKeySize
-,   macGenerateNonce
-,   generatePreferredMACNonce
 ) where
 
 import Botan.Internal.Prelude
@@ -43,18 +45,150 @@ import qualified Data.ByteString as ByteString
 
 -- TODO: Consider cipherNonceSize(IsValid) vs cipherNonceSpec
 
-{-
-Bindings Memorized instance
--}
+-- Main interface
+
+mac :: MACType -> MACKey -> ByteString -> MACDigest
+mac ty k bs = doIO $ _mac ty k Nothing bs
+
+verifyMAC ::  MACType -> MACKey -> ByteString -> MACDigest -> Bool
+verifyMAC ty k bs dg = doIO $ _verifyMAC ty k Nothing bs dg
+
+nmac :: MACType -> MACKey -> MACNonce -> ByteString -> MACDigest
+nmac ty k n bs = doIO $ _mac ty k (Just n) bs
+
+verifyNMAC ::  MACType -> MACKey -> MACNonce -> ByteString -> MACDigest -> Bool
+verifyNMAC ty k n bs dg = doIO $ _verifyMAC ty k (Just n) bs dg
+
+-- TODO:
+-- easyNMAC :: MACType -> MACKey -> ByteString -> IO (MACDigest, MACNonce)
+
+_mac :: MACType -> MACKey -> Maybe MACNonce -> ByteString -> IO MACDigest
+_mac macType key nonce input = do
+    m <- macInit macType
+    macSetKey m key.bytes
+    case nonce of
+        Just n -> macSetNonce m n.bytes
+        _ -> pure ()
+    macUpdate m input
+    macFinalize m
+
+_verifyMAC :: MACType -> MACKey -> Maybe MACNonce -> ByteString -> MACDigest -> IO Bool
+_verifyMAC macType key nonce input dg = do
+    dg' <- _mac macType key nonce input
+    return $ dg' == dg
+
+
+-- Data types
+
+newtype MACKey = MkMACKey { bytes :: ByteString }
+    deriving newtype (Eq, Show)
+
+generateMACKey :: MACType -> Int -> IO (Maybe MACKey)
+generateMACKey macType sz | validSize (macKeySpec macType) sz
+    = Just . MkMACKey <$> userThreadsafeRNGGet sz
+generateMACKey _ _ = pure Nothing
+
+generatePreferredMACKey :: MACType -> IO MACKey
+generatePreferredMACKey macType = MkMACKey <$> userThreadsafeRNGGet (macPreferredKeySize macType)
+
+macPreferredKeySize :: MACType -> Int
+macPreferredKeySize (CMAC bc)     = blockCipherPreferredKeySize bc
+macPreferredKeySize (GMAC bc)     = blockCipherPreferredKeySize bc
+macPreferredKeySize (HMAC h)      = hashDigestSize h
+macPreferredKeySize Poly1305      = 32
+macPreferredKeySize (SipHash _ _) = 16
+macPreferredKeySize X9_19_MAC     = 16
+
+newtype MACNonce = MkMACNonce { bytes :: ByteString }
+    deriving newtype (Eq, Show)
+
+macGenerateNonce :: MACType -> Int -> IO (Maybe MACNonce)
+macGenerateNonce macType sz | macNonceLengthIsValid macType sz = Just . MkMACNonce <$> userThreadsafeRNGGet sz
+macGenerateNonce _ _ = pure Nothing
+
+macPreferredNonceSize :: MACType -> Maybe Int
+macPreferredNonceSize (GMAC _) = Just 12
+macPreferredNonceSize _ = Nothing
+
+generatePreferredMACNonce :: MACType -> IO (Maybe MACNonce)
+generatePreferredMACNonce macType = case macPreferredNonceSize macType of
+    Just sz -> Just . MkMACNonce <$> userThreadsafeRNGGet sz
+    _       -> pure Nothing
+
+macNonceLengthIsValid :: MACType -> Int -> Bool
+macNonceLengthIsValid (GMAC _) n | 0 <= n && n <= 1024 = True
+macNonceLengthIsValid _        _                       = False
+-- NOTE: What about HMAC? Can it take a nonce?
+
+-- macDefaultNonceLength :: MACType -> Maybe Int
+-- macDefaultNonceLength (GMAC _) = Just 12
+-- macDefaultNonceLength _ = Nothing
+
+-- TODO: Rename MACTag?
+newtype MACDigest = MkMACDigest { bytes :: ByteString }
+    deriving newtype (Eq, Show)
+
+
+-- Algorithm type
+
+data MACType
+    = CMAC BlockCipherType
+    | GMAC BlockCipherType
+    -- | CBC_MAC BlockCipherType
+    | HMAC HashType
+    -- | KMAC_128 BlockCipherType
+    -- | KMAC_256 BlockCipherType
+    | Poly1305
+    | SipHash Int Int
+    | X9_19_MAC
+    deriving stock (Eq, Ord, Show)
+
+macName :: MACType -> ByteString
+macName (CMAC bc) = BOTAN_MAC_CMAC /$ blockCipherName bc   
+macName (GMAC bc) = BOTAN_MAC_GMAC /$ blockCipherName bc
+-- macName (CBC_MAC bc) = BOTAN_MAC_CBC_MAC /$ blockCipherName bc
+macName (HMAC h) = BOTAN_MAC_HMAC /$ hashName h
+-- macName (KMAC_128 bc) = BOTAN_MAC_KMAC_128 /$ blockCipherName bc
+-- macName (KMAC_256 bc) = BOTAN_MAC_KMAC_256 /$ blockCipherName bc
+macName Poly1305 = BOTAN_MAC_Poly1305
+macName (SipHash ir fr) = BOTAN_MAC_SipHash /$ commas [ prn ir, prn fr ]
+macName X9_19_MAC = BOTAN_MAC_X9_19_MAC
+
+
+macKeySpec :: MACType -> SizeSpec MACKey
+macKeySpec (CMAC bc)     = coerceSizeSpec $ blockCipherKeySpec bc
+macKeySpec (GMAC bc)     = coerceSizeSpec $ blockCipherKeySpec bc
+macKeySpec (HMAC _h)     = sizeSpec 0 4096 1
+macKeySpec Poly1305      = sizeSpec 32 32 1
+macKeySpec (SipHash _ _) = sizeSpec 16 16 1
+macKeySpec X9_19_MAC     = sizeSpec 8 16 8
+
+-- NOTE: Size in bytes
+macDigestSize :: MACType -> Int
+macDigestSize (CMAC bc)     = blockCipherBlockSize bc
+macDigestSize (GMAC _)      = 16    -- Always 16
+macDigestSize (HMAC h)      = hashDigestSize h
+macDigestSize Poly1305      = 16
+macDigestSize (SipHash _ _) = 8
+macDigestSize X9_19_MAC     = 8
+
+-- NOTE: Botan does not have a MAC nonce size query, but only GMAC requires a
+-- nonce, and it accepts a nonce of any length
+
+isNoncedMAC :: MACType -> Bool
+isNoncedMAC (GMAC _) = True
+isNoncedMAC _ = False
+
+-- Algorithms
+
+-- Bindings instance
 
 instance Memorized BotanMAC where
     type Memo BotanMAC = Ptr
     type MemRep BotanMAC = BotanMACStruct
     withMemo (MkBotanMAC ptr) action = action ptr
 
-{-
-MAC object
--}
+-- Context object
 
 newtype MAC = MkMAC { foreignPtr :: ForeignPtr BotanMACStruct }
 
@@ -72,19 +206,7 @@ instance BotanObject MAC where
     toBotan    = MkMAC
     botanFinalizer  = botan_mac_destroy
 
-{-
-MAC data types
--}
-
-type MACKey = ByteString
-type MACNonce = ByteString
-
--- TODO: Rename MACTag?
-type MACDigest = ByteString
-
-{-
-MAC functions
--}
+-- Bindings / IO interface
 
 withMAC :: MAC -> (BotanMAC -> IO a) -> IO a
 withMAC = withBotanPtr @MAC
@@ -165,8 +287,9 @@ macFinalize
     -> IO MACDigest -- ^ __out[]__: output buffer
 macFinalize mac = withMAC mac $ \ macPtr -> do
     sz <- macGetDigestSize mac
-    allocInit ByteStringAllocator sz $ \ fPtr -> withPtr fPtr $ \ bytesPtr ->
+    bs <- allocInit ByteStringAllocator sz $ \ fPtr -> withPtr fPtr $ \ bytesPtr ->
         throwBotanIfNegative_ $ botan_mac_final macPtr bytesPtr
+    pure $ MkMACDigest bs
 
 {- |
 Reinitializes the state of the MAC computation. A MAC can
@@ -195,57 +318,9 @@ macGetName = botanObjectName botan_mac_name
 macGetKeyspec :: MAC -> IO (SizeSpec MACKey)
 macGetKeyspec = botanObjectKeyspec botan_mac_get_keyspec
 
--- TODO: Generate the nonce automatically and return it?
--- eg, easyMAC :: MACType -> MACKey -> ByteString -> IO (Maybe MACNonce, MACDigest)
-mac :: MACType -> MACKey -> Maybe MACNonce -> ByteString -> IO MACDigest
-mac macType key nonce input = do
-    m <- macInit macType
-    macSetKey m key
-    maybe (pure ()) (macSetNonce m) nonce
-    -- Can we do this ^^^ more idiomatically? Maybe: traverse_
-    macUpdate m input
-    macFinalize m
+-- Custom convenience
 
-auth :: MACType -> MACKey -> Maybe MACNonce -> ByteString -> MACDigest -> IO Bool
-auth macType key nonce input dg = do
-    dg' <- mac macType key nonce input
-    return $ dg' == dg
-
-{-
-MAC algorithms
--}
-
-data MACType
-    = CMAC BlockCipherType
-    | GMAC BlockCipherType
-    -- | CBC_MAC BlockCipherType
-    | HMAC HashType
-    -- | KMAC_128 BlockCipherType
-    -- | KMAC_256 BlockCipherType
-    | Poly1305
-    | SipHash Int Int
-    | X9_19_MAC
-    deriving stock (Eq, Ord, Show)
-    
-macName :: MACType -> ByteString
-macName (CMAC bc) = BOTAN_MAC_CMAC /$ blockCipherName bc   
-macName (GMAC bc) = BOTAN_MAC_GMAC /$ blockCipherName bc
--- macName (CBC_MAC bc) = BOTAN_MAC_CBC_MAC /$ blockCipherName bc
-macName (HMAC h) = BOTAN_MAC_HMAC /$ hashName h
--- macName (KMAC_128 bc) = BOTAN_MAC_KMAC_128 /$ blockCipherName bc
--- macName (KMAC_256 bc) = BOTAN_MAC_KMAC_256 /$ blockCipherName bc
-macName Poly1305 = BOTAN_MAC_Poly1305
-macName (SipHash ir fr) = BOTAN_MAC_SipHash /$ commas [ prn ir, prn fr ]
-macName X9_19_MAC = BOTAN_MAC_X9_19_MAC
-
-
-macKeySpec :: MACType -> SizeSpec MACKey
-macKeySpec (CMAC bc)     = coerceSizeSpec $ blockCipherKeySpec bc
-macKeySpec (GMAC bc)     = coerceSizeSpec $ blockCipherKeySpec bc
-macKeySpec (HMAC _h)     = sizeSpec 0 4096 1
-macKeySpec Poly1305      = sizeSpec 32 32 1
-macKeySpec (SipHash _ _) = sizeSpec 16 16 1
-macKeySpec X9_19_MAC     = sizeSpec 8 16 8
+-- Helpers for generating
 
 generateMACKeySpecs :: IO ()
 generateMACKeySpecs = do
@@ -261,15 +336,6 @@ generateMACKeySpecs = do
     putStrLn $ unlines $
         "macKeySpec :: MACType -> SizeSpec MACKey"
         : each
-
--- NOTE: Size in bytes
-macDigestSize :: MACType -> Int
-macDigestSize (CMAC bc)     = blockCipherBlockSize bc
-macDigestSize (GMAC _)      = 16    -- Always 16
-macDigestSize (HMAC h)      = hashDigestSize h
-macDigestSize Poly1305      = 16
-macDigestSize (SipHash _ _) = 8
-macDigestSize X9_19_MAC     = 8
 
 generateMACDigestSizes :: IO ()
 generateMACDigestSizes = do
@@ -296,55 +362,6 @@ macs = concat
     , [ SipHash c d | c <- [ 1 .. 4 ], d <- [ 2 .. 8 ] ]
     , [ X9_19_MAC ]
     ]
-
-{-
-Non-canonical functions
--}
-
--- NOTE: Botan does not have a MAC nonce size query, but only GMAC requires a
--- nonce, and it accepts a nonce of any length
-
-isNoncedMAC :: MACType -> Bool
-isNoncedMAC (GMAC _) = True
-isNoncedMAC _ = False
-
-macNonceLengthIsValid :: MACType -> Int -> Bool
-macNonceLengthIsValid (GMAC _) n | 0 <= n && n <= 1024 = True
-macNonceLengthIsValid _        _                       = False
--- NOTE: What about HMAC? Can it take a nonce?
-
--- macDefaultNonceLength :: MACType -> Maybe Int
--- macDefaultNonceLength (GMAC _) = Just 12
--- macDefaultNonceLength _ = Nothing
-
-generateMACKey :: MACType -> Int -> IO (Maybe MACKey)
-generateMACKey macType sz | validSize (macKeySpec macType) sz = Just <$> userThreadsafeRNGGet sz
-generateMACKey _ _ = pure Nothing
-
-macPreferredKeySize :: MACType -> Int
-macPreferredKeySize (CMAC bc)     = blockCipherPreferredKeySize bc
-macPreferredKeySize (GMAC bc)     = blockCipherPreferredKeySize bc
-macPreferredKeySize (HMAC h)      = hashDigestSize h
-macPreferredKeySize Poly1305      = 32
-macPreferredKeySize (SipHash _ _) = 16
-macPreferredKeySize X9_19_MAC     = 16
-
-generatePreferredMACKey :: MACType -> IO MACKey
-generatePreferredMACKey macType = userThreadsafeRNGGet (macPreferredKeySize macType)
-
-macGenerateNonce :: MACType -> Int -> IO (Maybe MACNonce)
-macGenerateNonce macType sz | macNonceLengthIsValid macType sz = Just <$> userThreadsafeRNGGet sz
-macGenerateNonce _ _ = pure Nothing
-
-macPreferredNonceSize :: MACType -> Maybe Int
-macPreferredNonceSize (GMAC _) = Just 12
-macPreferredNonceSize _ = Nothing
-
-generatePreferredMACNonce :: MACType -> IO (Maybe MACNonce)
-generatePreferredMACNonce macType = case macPreferredNonceSize macType of
-    Just sz -> Just <$> userThreadsafeRNGGet sz
-    _       -> pure Nothing
-
 
 {-
 import Botan.Hash
